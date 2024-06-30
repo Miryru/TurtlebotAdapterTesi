@@ -1,0 +1,6 @@
+/aruco_node2:
+  ros__parameters:
+    marker_size: 0.02
+    aruco_dictionary_id: DICT_5X5_100
+    image_topic: /robot2/camera/image_raw
+    camera_info_topic: /robot2/camera/camera_info
