@@ -1,0 +1,4 @@
+int32 id
+---
+bool got_pose
+tutorial_interfaces/PoseErr pose_err
