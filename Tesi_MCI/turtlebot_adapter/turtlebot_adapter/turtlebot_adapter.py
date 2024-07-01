@@ -19,27 +19,34 @@ from tutorial_interfaces.srv import PoseEstimation
 
 
 class TurtleBotAdapter(Node):
-    def __init__(self , IP , port): #self , session ,useGoogleKey ,IP ,port
+    def __init__(self, IP , port): 
         super().__init__('turtlebot_adapter')
 
         # #socket connection
         self.serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.serverSocket.bind((IP, port))
-        self.serverSocket.listen(10) #da modificare
+        self.serverSocket.listen(10) 
         self.get_logger().info(f'Listening on {IP}:{port}')
+        self.get_namespace()
         self.result = None
         self.state = 'PART1'
         self.ack = False
         self.condition = threading.Condition()
-        self.action_client1 = ActionClient(self, NavigateToPose, 'robot1/navigate_to_pose')
-        self.action_client1.wait_for_server( timeout_sec=10.0)
-        self.aruco_client = self.create_client(PoseEstimation, 'aruco_srv')
+        self.action_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
+        self.action_client.wait_for_server( timeout_sec=10.0)
+        self.aruco_client = self.create_client(PoseEstimation, 'pose_estimation')
         while not self.aruco_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('service not available, waiting again...')
         
+        self.req = PoseEstimation.Request()
         self.get_logger().info('TurtleBot Adapter has been started')
         
-    
+    def send_request(self, id):
+        self.req.id
+        self.future = self.aruco_client.call_async(self.req)
+        rclpy.spin_until_future_complete(self, self.future)
+        return self.future.result()
+
     def goal_response_callback(self, future):
         goal_handle = future.result()
         if not goal_handle.accepted:
@@ -60,7 +67,6 @@ class TurtleBotAdapter(Node):
                 
                 (clientConnected, clientAddress) = self.serverSocket.accept()
                 print ("Accepted a connection request from %s:%s"%(clientAddress[0], clientAddress[1]))
-                
                 dataFromClient = clientConnected.recv(1024)
                 clientConnected.settimeout(440)
                 request = str(dataFromClient.decode())
@@ -73,7 +79,7 @@ class TurtleBotAdapter(Node):
                 if request_type == "PERFORMING":
                     
                     self.state = 'PART1'
-                    start_time = time.time()  # Start the timer
+                    start_time = time.time()  
                     self.performAction(data)
                     with self.condition:
                         while self.result is None:
@@ -87,9 +93,9 @@ class TurtleBotAdapter(Node):
                     
                     with self.condition:
                         while self.result is None:
-                            elapsed_time = time.time() - start_time  # Calculate elapsed time
-                            if elapsed_time > 100:  # If elapsed time is more than 15 seconds
-                                clientConnected.send(str(False).encode())  # Send False
+                            elapsed_time = time.time() - start_time  
+                            if elapsed_time > 100:  
+                                clientConnected.send(str(False).encode())  
                                 flag = True
                                 self.get_logger().info('Action not performed')
                                 break
@@ -102,16 +108,15 @@ class TurtleBotAdapter(Node):
                         flag = False
                     self.result = None 
                 
-                    
-                    
+                   
                 elif request_type == "VERIFYING":
-                    start_time = time.time()  # Start the timer
+                    start_time = time.time()  
                     
                     perceived_outcome = self.performVerification(data)
                     while self.ack == False:
-                        elapsed_time = time.time() - start_time  # Calculate elapsed time
-                        if elapsed_time > 100:  # If elapsed time is more than 70 seconds
-                            perceived_outcome = str(False).encode() # Send False
+                        elapsed_time = time.time() - start_time  
+                        if elapsed_time > 100:  
+                            perceived_outcome = str(False).encode() 
                             break
                     clientConnected.send(perceived_outcome)
                     self.get_logger().info('Verification performed')
@@ -119,76 +124,49 @@ class TurtleBotAdapter(Node):
             ## Stop recognition
             pass 
             
-    def performAction(self,data): #self, data
+    def performAction(self,data): 
 
         action_ID = data.split("/")[1]
-
         goal_msg = NavigateToPose.Goal()
 
-
-        if  action_ID == 'A1' :  #take the package
+        if  action_ID == 'A1' :  
 
             if self.state == 'PART1':
 
                 goal_msg.pose.header.frame_id = 'map'
-
                 goal_msg.pose.pose.position.x = 0.22
-
                 goal_msg.pose.pose.position.y = 2.73
-
                 goal_msg.pose.pose.orientation.w = 1.0
-
-                self.send_goal1(goal_msg)
-
-                
+                self.send_goal(goal_msg)
+   
             elif self.state== 'PART2':
 
                 goal_msg.pose.header.frame_id = 'map'
-
                 goal_msg.pose.pose.position.x = -2.64
-
                 goal_msg.pose.pose.position.y = -0.64
-
                 goal_msg.pose.pose.orientation.w = -1.0
-
-                self.robot_pose = [0.5, -0.5]
-
-                self.send_goal1(goal_msg)
-
-                
+                self.send_goal(goal_msg)
 
         elif action_ID == 'A2':
 
             if self.state == 'PART1':
 
                 goal_msg.pose.header.frame_id = 'map'
-
                 goal_msg.pose.pose.position.x = -1.86
-
                 goal_msg.pose.pose.position.y = 1.14
-
                 goal_msg.pose.pose.orientation.w = 1.0
-
-                
-
-                self.send_goal1(goal_msg)  
+                self.send_goal(goal_msg)  
 
             elif self.state == 'PART2':
 
                 goal_msg.pose.header.frame_id = 'map'
-
                 goal_msg.pose.pose.position.x = -0.55
-
                 goal_msg.pose.pose.position.y = 0.13
-
                 goal_msg.pose.pose.orientation.w = 1.0
-
-                
-
-                self.send_goal1(goal_msg)   
+                self.send_goal(goal_msg)   
     
-    def send_goal1(self, goal_msg):
-        self.goal_handle_future = self.action_client1.send_goal_async(goal_msg)
+    def send_goal(self, goal_msg):
+        self.goal_handle_future = self.action_client.send_goal_async(goal_msg)
         self.goal_handle_future.add_done_callback(self.goal_response_callback)
         
     def performVerification(self,data ):    
@@ -198,52 +176,52 @@ class TurtleBotAdapter(Node):
         if action_ID == 'A1':
             self.get_logger().info('Verification of A1 started')
             goal_msg.pose.header.frame_id = 'map'
-            goal_msg.pose.pose.position.x = -1.43
-            goal_msg.pose.pose.position.y = 0.70
-            goal_msg.pose.pose.orientation.w = 1.0  #da modificare 
-            self.send_goal1(goal_msg)
+            goal_msg.pose.pose.position.x = -2.37
+            goal_msg.pose.pose.position.y = -0.25
+            goal_msg.pose.pose.orientation.w = -1.0 
+            self.send_goal(goal_msg)
             
             with self.condition:
                 while self.result is None:
                     self.condition.wait()
-            
+            time.sleep(20)
             #call the service to get the pose of the aruco marker
-            req = PoseEstimation.Request()
-            req.id = 1
-            response = self.aruco_client.call_async(req)
+            response = self.send_request(1)
             if response.got_pose:
-                aruco_distance = abs(response.pose_err)
-                if aruco_distance >= 3.0: #da cambiare
+                aruco_distance = abs(response.pose_err.x_err)
+                if aruco_distance < 1.0: 
                     self.get_logger().info('Aruco marker detected')
-                perceived_outcome = str(True).encode()
+                    perceived_outcome = str(True).encode()
+                else :
+                    perceived_outcome = str(False).encode()
+
             else:
                 perceived_outcome = str(False).encode()
                 self.get_logger().info('Aruco marker not detected')
-            
-            
-
-            
+               
         elif action_ID == 'A2':
             self.get_logger().info('Verification of A2 started')
             goal_msg.pose.header.frame_id = 'map'
-            goal_msg.pose.pose.position.x = -1.43 #da modificare
-            goal_msg.pose.pose.position.y = 0.70 #da modificare
-            goal_msg.pose.pose.orientation.w = 1.0  #da modificare 
-            self.send_goal1(goal_msg)
+            goal_msg.pose.pose.position.x = -0.98 
+            goal_msg.pose.pose.position.y = 1.09 
+            goal_msg.pose.pose.orientation.w = 0.5  
+            self.send_goal(goal_msg)
             
             with self.condition:
                 while self.result is None:
                     self.condition.wait()
             
+            time.sleep(20)
             #call the service to get the pose of the aruco marker
-            req = PoseEstimation.Request()
-            req.id = 1
-            response = self.aruco_client.call_async(req)
+            response = self.send_request(1)
             if response.got_pose:
-                aruco_distance = abs(response.pose_err)
-                if aruco_distance >= 1.0: #da cambiare
+                aruco_distance = abs(response.pose_err.x_err)
+                self.get_logger().info('Aruco marker detected')
+                if aruco_distance < 1.0:
                     self.get_logger().info('Aruco marker detected')
-                perceived_outcome = str(True).encode()
+                    perceived_outcome = str(True).encode()
+                else :
+                    perceived_outcome = str(False).encode()
             else:
                 perceived_outcome = str(False).encode()
                 self.get_logger().info('Aruco marker not detected')
@@ -255,8 +233,8 @@ class TurtleBotAdapter(Node):
 def main(args=None):
     rclpy.init(args=args)
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ip", type=str, default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=19001)
+    parser.add_argument("--ip", type=str, default="192.168.50.154")
+    parser.add_argument("--port", type=int, default=4000)
     args = parser.parse_args()
     executor = MultiThreadedExecutor()
     turtlebot_adapter = TurtleBotAdapter(args.ip, args.port)
@@ -276,3 +254,4 @@ def main(args=None):
 if __name__ == '__main__':
     main()
     
+
